@@ -4,7 +4,7 @@ from pathlib import Path
 import torch
 from tqdm import tqdm
 
-DATASET_PATH = Path.home() / "datasets/re10k"
+DATASET_PATH = Path.home() / "datasets/DL3DV-10K/dl3dv_pt"
 
 if __name__ == "__main__":
     for stage in DATASET_PATH.iterdir():

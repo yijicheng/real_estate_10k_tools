@@ -8,43 +8,23 @@ import torch
 from jaxtyping import Float, Int, UInt8
 from torch import Tensor
 from tqdm import tqdm
+import json
 
-INPUT_IMAGE_DIR = Path("/data/scene-rep/Real-Estate-10k")
-INPUT_METADATA_DIR = Path("/data/scene-rep/Real-Estate-10k/metadata/RealEstate10K")
-OUTPUT_DIR = Path("/data/scene-rep/Real-Estate-10k/re10k_pt")
+INPUT_IMAGE_DIR = Path("/workspace/real_estate_10k_tools/datasets/DL3DV-10K")
+OUTPUT_DIR = Path("/workspace/real_estate_10k_tools/datasets/DL3DV-10K/dl3dv_pt")
 
 # Target 100 MB per chunk.
-TARGET_BYTES_PER_CHUNK = int(1e8)
+TARGET_BYTES_PER_CHUNK = int(1e9)
 
 
 def get_example_keys(stage: Literal["test", "train"]) -> list[str]:
-    image_keys = set(
+    sequence_keys = set(
         example.name
-        for example in tqdm((INPUT_IMAGE_DIR / stage).iterdir(), desc="Indexing images")
-    )
-    metadata_keys = set(
-        example.stem
-        for example in tqdm(
-            (INPUT_METADATA_DIR / stage).iterdir(), desc="Indexing metadata"
-        )
+        for example in tqdm((INPUT_IMAGE_DIR / stage).iterdir(), desc="Indexing sequences")
     )
 
-    missing_image_keys = metadata_keys - image_keys
-    if len(missing_image_keys) > 0:
-        print(
-            f"Found metadata but no images for {len(missing_image_keys)} examples.",
-            file=sys.stderr,
-        )
-    missing_metadata_keys = image_keys - metadata_keys
-    if len(missing_metadata_keys) > 0:
-        print(
-            f"Found images but no metadata for {len(missing_metadata_keys)} examples.",
-            file=sys.stderr,
-        )
-
-    keys = image_keys & metadata_keys
-    print(f"Found {len(keys)} keys.")
-    return keys
+    print(f"Found {len(sequence_keys)} keys.")
+    return sequence_keys
 
 
 def get_size(path: Path) -> int:
@@ -59,7 +39,7 @@ def load_raw(path: Path) -> UInt8[Tensor, " length"]:
 def load_images(example_path: Path) -> dict[int, UInt8[Tensor, "..."]]:
     """Load JPG images as raw bytes (do not decode)."""
 
-    return {int(path.stem): load_raw(path) for path in example_path.iterdir()}
+    return {path.stem: load_raw(path) for path in example_path.iterdir()}
 
 
 class Metadata(TypedDict):
@@ -75,30 +55,14 @@ class Example(Metadata):
 
 def load_metadata(example_path: Path) -> Metadata:
     with example_path.open("r") as f:
-        lines = f.read().splitlines()
+        meta = json.load(f)
 
-    url = lines[0]
-
-    timestamps = []
-    cameras = []
-
-    for line in lines[1:]:
-        timestamp, *camera = line.split(" ")
-        timestamps.append(int(timestamp))
-        cameras.append(np.fromstring(",".join(camera), sep=","))
-
-    timestamps = torch.tensor(timestamps, dtype=torch.int64)
-    cameras = torch.tensor(np.stack(cameras), dtype=torch.float32)
-
-    return {
-        "url": url,
-        "timestamps": timestamps,
-        "cameras": cameras,
-    }
+    return meta
 
 
 if __name__ == "__main__":
-    for stage in ("train", "test"):
+    for stage in ("1K", "2K", "3K", "4K"):
+    # for stage in ("1K",):
         keys = get_example_keys(stage)
 
         chunk_size = 0
@@ -122,10 +86,10 @@ if __name__ == "__main__":
             chunk_size = 0
             chunk_index += 1
             chunk = []
-
+        
         for key in keys:
-            image_dir = INPUT_IMAGE_DIR / stage / key
-            metadata_dir = INPUT_METADATA_DIR / stage / f"{key}.txt"
+            image_dir = INPUT_IMAGE_DIR / stage / key / "images_8"
+            metadata_dir = INPUT_IMAGE_DIR / stage / key / "transforms.json"
             num_bytes = get_size(image_dir)
 
             # Read images and metadata.
@@ -133,10 +97,8 @@ if __name__ == "__main__":
             example = load_metadata(metadata_dir)
 
             # Merge the images into the example.
-            example["images"] = [
-                images[timestamp.item()] for timestamp in example["timestamps"]
-            ]
-            assert len(images) == len(example["timestamps"])
+            example["images"] = images
+            # assert len(images.keys()) == len(example["frames"])
 
             # Add the key to the example.
             example["key"] = key
