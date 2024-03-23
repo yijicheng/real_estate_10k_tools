@@ -10,11 +10,11 @@ from torch import Tensor
 from tqdm import tqdm
 import json
 
-INPUT_IMAGE_DIR = Path("/workspace/real_estate_10k_tools/datasets/DL3DV-10K")
-OUTPUT_DIR = Path("/workspace/real_estate_10k_tools/datasets/DL3DV-10K/dl3dv_pt")
+INPUT_IMAGE_DIR = Path("/workspace/real_estate_10k_tools/datasets/DL3DV-10K-960P")
+OUTPUT_DIR = Path("/workspace/real_estate_10k_tools/datasets/DL3DV-10K-960P/dl3dv_pt")
 
 # Target 100 MB per chunk.
-TARGET_BYTES_PER_CHUNK = int(1e9)
+TARGET_BYTES_PER_CHUNK = int(5e9)
 
 
 def get_example_keys(stage: Literal["test", "train"]) -> list[str]:
@@ -61,7 +61,7 @@ def load_metadata(example_path: Path) -> Metadata:
 
 
 if __name__ == "__main__":
-    for stage in ("1K", "2K", "3K", "4K"):
+    for stage in ("1K","2K","3K","4K",):
     # for stage in ("1K",):
         keys = get_example_keys(stage)
 
@@ -88,13 +88,17 @@ if __name__ == "__main__":
             chunk = []
         
         for key in keys:
-            image_dir = INPUT_IMAGE_DIR / stage / key / "images_8"
+            image_dir = INPUT_IMAGE_DIR / stage / key / "images_4"
             metadata_dir = INPUT_IMAGE_DIR / stage / key / "transforms.json"
             num_bytes = get_size(image_dir)
 
             # Read images and metadata.
-            images = load_images(image_dir)
-            example = load_metadata(metadata_dir)
+            try:
+                images = load_images(image_dir)
+                example = load_metadata(metadata_dir)
+            except:
+                print(key)
+                continue
 
             # Merge the images into the example.
             example["images"] = images
